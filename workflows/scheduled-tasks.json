@@ -1,0 +1,168 @@
+{
+  "name": "Scheduled Tasks Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      },
+      "id": "cron-daily-001",
+      "name": "Daily at 2 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 3 * * 0"
+            }
+          ]
+        }
+      },
+      "id": "cron-weekly-001",
+      "name": "Weekly on Sunday",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\n# Backup important directories\nBACKUP_DIR=\"/home/node/backups/$(date +%Y-%m-%d)\"\nmkdir -p \"$BACKUP_DIR\"\n\n# Backup workflows\ncp -r /home/node/.n8n/workflows \"$BACKUP_DIR/workflows\"\n\n# Backup credentials (encrypted)\ncp -r /home/node/.n8n/credentials \"$BACKUP_DIR/credentials\"\n\n# Create archive\ntar -czf \"${BACKUP_DIR}.tar.gz\" -C \"$(dirname $BACKUP_DIR)\" \"$(basename $BACKUP_DIR)\"\n\n# Remove uncompressed backup\nrm -rf \"$BACKUP_DIR\"\n\necho \"Backup completed: ${BACKUP_DIR}.tar.gz\"\n"
+      },
+      "id": "exec-backup-001",
+      "name": "Run Backup",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\n# Cleanup old backups (keep last 7 days)\nBACKUP_ROOT=\"/home/node/backups\"\nfind \"$BACKUP_ROOT\" -name \"*.tar.gz\" -type f -mtime +7 -delete\n\necho \"Old backups cleaned up\"\n"
+      },
+      "id": "exec-cleanup-backups-001",
+      "name": "Cleanup Old Backups",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\n# Clean temporary files\nfind /tmp -type f -atime +3 -delete\nfind /home/node/temp -type f -mtime +1 -delete 2>/dev/null || true\n\n# Clean logs older than 30 days\nfind /home/node/logs -name \"*.log\" -type f -mtime +30 -delete 2>/dev/null || true\n\necho \"Temporary files cleaned\"\n"
+      },
+      "id": "exec-cleanup-temp-001",
+      "name": "Cleanup Temp Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [450, 500]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\n# Generate system report\nREPORT_FILE=\"/home/node/reports/weekly-report-$(date +%Y-%m-%d).txt\"\nmkdir -p \"$(dirname $REPORT_FILE)\"\n\necho \"=== Weekly System Report ===\" > \"$REPORT_FILE\"\necho \"Generated: $(date)\" >> \"$REPORT_FILE\"\necho \"\" >> \"$REPORT_FILE\"\n\necho \"--- Disk Usage ---\" >> \"$REPORT_FILE\"\ndf -h >> \"$REPORT_FILE\"\necho \"\" >> \"$REPORT_FILE\"\n\necho \"--- Memory Usage ---\" >> \"$REPORT_FILE\"\nfree -h >> \"$REPORT_FILE\"\necho \"\" >> \"$REPORT_FILE\"\n\necho \"--- Top Processes by Memory ---\" >> \"$REPORT_FILE\"\nps aux --sort=-%mem | head -n 10 >> \"$REPORT_FILE\"\necho \"\" >> \"$REPORT_FILE\"\n\necho \"--- Backup Status ---\" >> \"$REPORT_FILE\"\nls -lh /home/node/backups/*.tar.gz 2>/dev/null | tail -n 5 >> \"$REPORT_FILE\" || echo \"No backups found\" >> \"$REPORT_FILE\"\n\necho \"Report generated: $REPORT_FILE\"\ncat \"$REPORT_FILE\"\n"
+      },
+      "id": "exec-report-001",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log task completion\nconst input = $input.first();\nconst taskName = input.json.taskName || 'Unknown Task';\nconst output = input.json.stdout || '';\n\nreturn [{\n  json: {\n    task: taskName,\n    timestamp: new Date().toISOString(),\n    status: 'completed',\n    output: output.substring(0, 500),\n    message: `Task '${taskName}' completed successfully`\n  }\n}];"
+      },
+      "id": "code-log-completion-001",
+      "name": "Log Completion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 400]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily at 2 AM": {
+      "main": [
+        [
+          {
+            "node": "Run Backup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly on Sunday": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Temp Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Backup": {
+      "main": [
+        [
+          {
+            "node": "Cleanup Old Backups",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup Old Backups": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cleanup Temp Files": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Log Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "4",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": ["scheduled", "backup", "maintenance"]
+}

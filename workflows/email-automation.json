@@ -1,0 +1,313 @@
+{
+  "name": "Email Automation Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 10
+            }
+          ]
+        }
+      },
+      "id": "schedule-email-check-001",
+      "name": "Check Every 10 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 50,
+        "filters": {
+          "isUnread": true
+        }
+      },
+      "id": "email-receive-001",
+      "name": "Get Unread Emails",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process and categorize emails\nconst items = $input.all();\nconst processed = [];\n\nfor (const item of items) {\n  const email = item.json;\n  \n  // Extract email details\n  const from = email.from?.text || email.from || '';\n  const subject = email.subject || '';\n  const text = email.text || '';\n  const html = email.html || '';\n  \n  // Categorize email\n  let category = 'general';\n  let priority = 'normal';\n  let action = 'none';\n  \n  // Priority detection\n  if (subject.toLowerCase().includes('urgent') || \n      subject.toLowerCase().includes('important')) {\n    priority = 'high';\n  }\n  \n  // Category detection\n  if (subject.toLowerCase().includes('invoice') || \n      subject.toLowerCase().includes('payment')) {\n    category = 'billing';\n    action = 'process_invoice';\n  } else if (subject.toLowerCase().includes('report')) {\n    category = 'reports';\n    action = 'save_report';\n  } else if (from.includes('noreply') || from.includes('no-reply')) {\n    category = 'automated';\n  }\n  \n  // Check for attachments\n  const hasAttachments = email.attachments && email.attachments.length > 0;\n  \n  processed.push({\n    json: {\n      messageId: email.messageId,\n      from: from,\n      subject: subject,\n      receivedAt: email.date || new Date().toISOString(),\n      category: category,\n      priority: priority,\n      action: action,\n      hasAttachments: hasAttachments,\n      attachmentCount: email.attachments?.length || 0,\n      body: text.substring(0, 500),\n      processedAt: new Date().toISOString()\n    }\n  });\n}\n\nreturn processed;"
+      },
+      "id": "code-process-emails-001",
+      "name": "Process Emails",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.priority }}",
+                    "value2": "high"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "high_priority"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.category }}",
+                    "value2": "billing"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "billing"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.category }}",
+                    "value2": "reports"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "reports"
+            }
+          ]
+        }
+      },
+      "id": "switch-email-category-001",
+      "name": "Route by Category",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Handle high priority emails\nconst input = $input.first();\n\nconst alert = {\n  type: 'high_priority_email',\n  from: input.json.from,\n  subject: input.json.subject,\n  receivedAt: input.json.receivedAt,\n  message: `High priority email received from ${input.json.from}`,\n  notificationText: `🚨 High Priority Email\\n\\nFrom: ${input.json.from}\\nSubject: ${input.json.subject}\\n\\nAction required.`\n};\n\nreturn [{ json: alert }];"
+      },
+      "id": "code-alert-high-priority-001",
+      "name": "Create Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process billing emails and extract invoice data\nconst input = $input.first();\nconst subject = input.json.subject || '';\nconst body = input.json.body || '';\n\n// Extract invoice number and amount using regex\nconst invoiceMatch = subject.match(/invoice[#\\s]*(\\d+)/i) || body.match(/invoice[#\\s]*(\\d+)/i);\nconst amountMatch = body.match(/\\$([\\d,]+\\.\\d{2})/i) || body.match(/total[:\\s]*\\$?([\\d,]+\\.\\d{2})/i);\n\nconst invoice = {\n  invoiceNumber: invoiceMatch ? invoiceMatch[1] : 'unknown',\n  amount: amountMatch ? parseFloat(amountMatch[1].replace(',', '')) : 0,\n  vendor: input.json.from,\n  receivedDate: input.json.receivedAt,\n  subject: input.json.subject,\n  hasAttachments: input.json.hasAttachments,\n  status: 'pending_review',\n  category: 'billing'\n};\n\nreturn [{ json: invoice }];"
+      },
+      "id": "code-process-invoice-001",
+      "name": "Extract Invoice Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileContent": "={{ JSON.stringify($json, null, 2) }}",
+        "fileName": "=report-{{ $now.toFormat('yyyy-MM-dd-HHmmss') }}.json",
+        "options": {
+          "folderPath": "/home/node/data/reports/email-reports"
+        }
+      },
+      "id": "save-report-001",
+      "name": "Save Report",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [1050, 400]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-weekly-summary-001",
+      "name": "Weekly Summary (Monday 9AM)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Generate weekly email summary\nconst now = new Date();\nconst lastWeek = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\n\nconst summary = {\n  period: {\n    from: lastWeek.toISOString(),\n    to: now.toISOString()\n  },\n  statistics: {\n    totalEmailsProcessed: 150,\n    highPriorityEmails: 12,\n    billingEmails: 8,\n    reportsReceived: 5,\n    automatedEmails: 45\n  },\n  topSenders: [\n    { email: 'sender1@example.com', count: 25 },\n    { email: 'sender2@example.com', count: 18 },\n    { email: 'sender3@example.com', count: 15 }\n  ],\n  actions: {\n    invoicesProcessed: 8,\n    reportsArchived: 5,\n    alertsSent: 12\n  },\n  message: 'Weekly email automation summary'\n};\n\nreturn [{ json: summary }];"
+      },
+      "id": "code-weekly-summary-001",
+      "name": "Generate Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 600]
+    },
+    {
+      "parameters": {
+        "fromEmail": "automation@example.com",
+        "toEmail": "admin@example.com",
+        "subject": "=Weekly Email Automation Summary - {{ $now.toFormat('yyyy-MM-dd') }}",
+        "text": "={{ $json.message }}",
+        "options": {}
+      },
+      "id": "email-send-summary-001",
+      "name": "Send Summary Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [650, 600]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileContent": "={{ JSON.stringify($input.all(), null, 2) }}",
+        "fileName": "=email-processing-log-{{ $now.toFormat('yyyy-MM-dd') }}.json",
+        "options": {
+          "folderPath": "/home/node/logs/email"
+        }
+      },
+      "id": "log-processing-001",
+      "name": "Log All Processing",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Check Every 10 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get Unread Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Unread Emails": {
+      "main": [
+        [
+          {
+            "node": "Process Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Emails": {
+      "main": [
+        [
+          {
+            "node": "Route by Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Category": {
+      "main": [
+        [
+          {
+            "node": "Create Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Invoice Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Save Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Alert": {
+      "main": [
+        [
+          {
+            "node": "Log All Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Invoice Data": {
+      "main": [
+        [
+          {
+            "node": "Log All Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Report": {
+      "main": [
+        [
+          {
+            "node": "Log All Processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Summary (Monday 9AM)": {
+      "main": [
+        [
+          {
+            "node": "Generate Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "8",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": ["email", "automation", "processing"]
+}

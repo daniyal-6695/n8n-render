@@ -1,0 +1,151 @@
+{
+  "name": "File Management Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger-001",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "path": "/home/node/files/incoming",
+        "event": "add"
+      },
+      "id": "file-trigger-001",
+      "name": "Watch Folder",
+      "type": "n8n-nodes-base.localFileTrigger",
+      "typeVersion": 1,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Categorize files by extension\nconst items = $input.all();\nconst categorized = [];\n\nfor (const item of items) {\n  const fileName = item.json.fileName || item.json.name || '';\n  const extension = fileName.split('.').pop().toLowerCase();\n  \n  let category = 'other';\n  \n  if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg'].includes(extension)) {\n    category = 'images';\n  } else if (['pdf', 'doc', 'docx', 'txt', 'odt'].includes(extension)) {\n    category = 'documents';\n  } else if (['mp4', 'avi', 'mov', 'mkv', 'flv'].includes(extension)) {\n    category = 'videos';\n  } else if (['mp3', 'wav', 'flac', 'aac', 'ogg'].includes(extension)) {\n    category = 'audio';\n  } else if (['zip', 'rar', '7z', 'tar', 'gz'].includes(extension)) {\n    category = 'archives';\n  } else if (['exe', 'dmg', 'app', 'deb', 'rpm'].includes(extension)) {\n    category = 'executables';\n  }\n  \n  categorized.push({\n    json: {\n      ...item.json,\n      category,\n      extension,\n      originalPath: item.json.path || fileName\n    }\n  });\n}\n\nreturn categorized;"
+      },
+      "id": "code-categorize-001",
+      "name": "Categorize Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 500]
+    },
+    {
+      "parameters": {
+        "command": "=mkdir -p /home/node/files/organized/{{ $json.category }} && mv \"{{ $json.originalPath }}\" \"/home/node/files/organized/{{ $json.category }}/{{ $json.fileName }}\""
+      },
+      "id": "move-file-001",
+      "name": "Move to Category Folder",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "command": "find /home/node/files/temp -type f -printf '%p|%T@\\n'"
+      },
+      "id": "list-files-001",
+      "name": "List Temp Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse file list and filter old files\nconst input = $input.first();\nconst output = input.json.stdout || '';\nconst lines = output.trim().split('\\n').filter(line => line);\nconst now = new Date();\nconst sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\nconst filesToDelete = [];\n\nfor (const line of lines) {\n  const [path, timestampStr] = line.split('|');\n  const modifiedTime = new Date(parseFloat(timestampStr) * 1000);\n  \n  if (modifiedTime < sevenDaysAgo) {\n    const fileName = path.split('/').pop();\n    filesToDelete.push({\n      json: {\n        path: path,\n        fileName: fileName,\n        age: Math.floor((now - modifiedTime) / (1000 * 60 * 60 * 24)) + ' days'\n      }\n    });\n  }\n}\n\nreturn filesToDelete;"
+      },
+      "id": "code-filter-old-001",
+      "name": "Filter Old Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "command": "rm -f {{ $json.path }}"
+      },
+      "id": "delete-file-001",
+      "name": "Delete Old Files",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "List Temp Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Watch Folder": {
+      "main": [
+        [
+          {
+            "node": "Categorize Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Categorize Files": {
+      "main": [
+        [
+          {
+            "node": "Move to Category Folder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Temp Files": {
+      "main": [
+        [
+          {
+            "node": "Filter Old Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Old Files": {
+      "main": [
+        [
+          {
+            "node": "Delete Old Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "2",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": ["file-management", "automation", "cleanup"]
+}

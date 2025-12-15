@@ -1,0 +1,152 @@
+{
+  "name": "System Monitoring Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-monitor-001",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "command": "=#!/bin/bash\necho '{'\necho '\"cpu\": \"'$(top -bn1 | grep \"Cpu(s)\" | sed \"s/.*, *\\([0-9.]*\\)%* id.*/\\1/\" | awk '{print 100 - $1}')'\",'\necho '\"memory\": \"'$(free | grep Mem | awk '{print ($3/$2) * 100.0}')'\",'\necho '\"disk\": \"'$(df -h / | tail -1 | awk '{print $5}' | sed 's/%//')'\",'\necho '\"timestamp\": \"'$(date -Iseconds)'\"'\necho '}'\n"
+      },
+      "id": "exec-system-stats-001",
+      "name": "Get System Stats",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse system stats and check thresholds\nconst input = $input.first();\nconst stdout = input.json.stdout || '{}';\nconst stats = JSON.parse(stdout);\n\nconst cpu = parseFloat(stats.cpu) || 0;\nconst memory = parseFloat(stats.memory) || 0;\nconst disk = parseFloat(stats.disk) || 0;\n\nconst alerts = [];\n\n// Define thresholds\nconst CPU_THRESHOLD = 80;\nconst MEMORY_THRESHOLD = 85;\nconst DISK_THRESHOLD = 90;\n\nif (cpu > CPU_THRESHOLD) {\n  alerts.push({\n    type: 'CPU',\n    level: 'warning',\n    value: cpu.toFixed(2) + '%',\n    threshold: CPU_THRESHOLD + '%',\n    message: `CPU usage is high: ${cpu.toFixed(2)}%`\n  });\n}\n\nif (memory > MEMORY_THRESHOLD) {\n  alerts.push({\n    type: 'Memory',\n    level: 'warning',\n    value: memory.toFixed(2) + '%',\n    threshold: MEMORY_THRESHOLD + '%',\n    message: `Memory usage is high: ${memory.toFixed(2)}%`\n  });\n}\n\nif (disk > DISK_THRESHOLD) {\n  alerts.push({\n    type: 'Disk',\n    level: 'critical',\n    value: disk + '%',\n    threshold: DISK_THRESHOLD + '%',\n    message: `Disk usage is critical: ${disk}%`\n  });\n}\n\nreturn [{\n  json: {\n    timestamp: stats.timestamp,\n    stats: {\n      cpu: cpu.toFixed(2) + '%',\n      memory: memory.toFixed(2) + '%',\n      disk: disk + '%'\n    },\n    alerts: alerts,\n    hasAlerts: alerts.length > 0\n  }\n}];"
+      },
+      "id": "code-check-thresholds-001",
+      "name": "Check Thresholds",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.hasAlerts }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-has-alerts-001",
+      "name": "Has Alerts?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format alert message\nconst input = $input.first();\nconst alerts = input.json.alerts || [];\nconst stats = input.json.stats || {};\n\nlet message = '🚨 System Alert\\n\\n';\nmessage += `Timestamp: ${input.json.timestamp}\\n\\n`;\nmessage += 'Current Status:\\n';\nmessage += `- CPU: ${stats.cpu}\\n`;\nmessage += `- Memory: ${stats.memory}\\n`;\nmessage += `- Disk: ${stats.disk}\\n\\n`;\n\nif (alerts.length > 0) {\n  message += 'Alerts:\\n';\n  alerts.forEach((alert, index) => {\n    const emoji = alert.level === 'critical' ? '🔴' : '⚠️';\n    message += `${emoji} ${alert.message}\\n`;\n  });\n}\n\nreturn [{\n  json: {\n    subject: '🚨 System Resource Alert',\n    message: message,\n    alerts: alerts\n  }\n}];"
+      },
+      "id": "code-format-alert-001",
+      "name": "Format Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 200]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileContent": "={{ $json.message }}",
+        "fileName": "=system-alert-{{ $now.toFormat('yyyy-MM-dd-HHmmss') }}.txt",
+        "options": {
+          "folderPath": "/home/node/logs/alerts"
+        }
+      },
+      "id": "write-log-001",
+      "name": "Log Alert",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [1250, 200]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Get System Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get System Stats": {
+      "main": [
+        [
+          {
+            "node": "Check Thresholds",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Thresholds": {
+      "main": [
+        [
+          {
+            "node": "Has Alerts?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Alerts?": {
+      "main": [
+        [
+          {
+            "node": "Format Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Alert": {
+      "main": [
+        [
+          {
+            "node": "Log Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "3",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": ["monitoring", "system", "alerts"]
+}

@@ -1,11 +1,36 @@
 {
-  "name": "n8n-render",
+  "name": "n8n-computer-automation-agent",
   "version": "1.0.0",
-  "description": "n8n on Render",
+  "description": "A powerful computer automation agent built on n8n with pre-configured workflows for file management, system monitoring, data processing, web automation, and more",
+  "main": "index.js",
   "scripts": {
-    "start": "n8n start"
+    "start": "n8n start",
+    "setup": "./setup-agent.sh",
+    "dev": "n8n start"
   },
+  "keywords": [
+    "automation",
+    "n8n",
+    "workflow",
+    "agent",
+    "computer-automation",
+    "file-management",
+    "system-monitoring",
+    "data-processing",
+    "web-scraping",
+    "api-integration",
+    "email-automation"
+  ],
+  "author": "daniyal-6695",
+  "license": "MIT",
   "dependencies": {
     "n8n": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/daniyal-6695/n8n-render.git"
   }
 }
