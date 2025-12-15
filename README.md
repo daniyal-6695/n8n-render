@@ -177,6 +177,7 @@ Each workflow can be customized:
 - [n8n Documentation](https://docs.n8n.io)
 - [n8n Community Forum](https://community.n8n.io)
 - [Workflow Templates](./workflows/README.md)
+- [Cron Scheduling Guide](./CRON-GUIDE.md) - Learn how to schedule workflows
 - [n8n Nodes Reference](https://docs.n8n.io/nodes/)
 
 ## 🐛 Troubleshooting

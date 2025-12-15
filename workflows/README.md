@@ -53,7 +53,7 @@ This directory contains pre-configured workflow templates for automating compute
 Each workflow template can be customized to fit your specific needs:
 - Modify trigger conditions
 - Add/remove nodes
-- Change scheduling intervals
+- Change scheduling intervals (see [Cron Scheduling Guide](../CRON-GUIDE.md))
 - Update credentials and connections
 
 ## Environment Variables

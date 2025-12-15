@@ -156,6 +156,8 @@ Your automation agent comes pre-configured with:
 3. Modify the interval or cron expression
 4. Save and re-activate
 
+**Need help with cron expressions?** Check the [Cron Scheduling Guide](CRON-GUIDE.md)
+
 ### Add Email Notifications
 
 1. Go to Settings → Credentials
