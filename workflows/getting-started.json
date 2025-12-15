@@ -1,0 +1,104 @@
+{
+  "name": "Getting Started - Computer Automation Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "When clicking 'Test workflow'",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "message",
+              "value": "Welcome to Computer Automation Agent!"
+            },
+            {
+              "name": "status",
+              "value": "Agent is ready to automate your tasks"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Agent Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "formatDate",
+        "date": "={{ new Date() }}",
+        "format": "yyyy-MM-dd HH:mm:ss",
+        "options": {}
+      },
+      "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "name": "Current Timestamp",
+      "type": "n8n-nodes-base.dateTime",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Example: Get system information\nconst systemInfo = {\n  timestamp: new Date().toISOString(),\n  message: 'Automation agent is active',\n  capabilities: [\n    'File Management',\n    'Scheduled Tasks',\n    'Web Automation',\n    'Email Processing',\n    'API Integration',\n    'Data Processing'\n  ],\n  nextSteps: [\n    '1. Import additional workflow templates',\n    '2. Configure your credentials',\n    '3. Customize workflows for your needs',\n    '4. Activate workflows to start automation'\n  ]\n};\n\nreturn systemInfo;"
+      },
+      "id": "d4e5f6a7-b8c9-0123-def0-234567890123",
+      "name": "Agent Capabilities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking 'Test workflow'": {
+      "main": [
+        [
+          {
+            "node": "Agent Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Status": {
+      "main": [
+        [
+          {
+            "node": "Current Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Current Timestamp": {
+      "main": [
+        [
+          {
+            "node": "Agent Capabilities",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "1",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": []
+}

@@ -1,0 +1,198 @@
+{
+  "name": "Web Automation Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "schedule-web-001",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-request-001",
+      "name": "Fetch Web Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract data from HTML\nconst cheerio = require('cheerio');\nconst input = $input.first();\nconst html = input.json.data || input.json.body || '';\nconst $ = cheerio.load(html);\n\n// Example: Extract headlines from a news site\nconst headlines = [];\n$('h1, h2, h3').each((i, elem) => {\n  const text = $(elem).text().trim();\n  if (text && text.length > 10) {\n    headlines.push(text);\n  }\n});\n\nreturn [{\n  json: {\n    url: input.json.url,\n    scrapedAt: new Date().toISOString(),\n    headlinesCount: headlines.length,\n    headlines: headlines.slice(0, 20),\n    title: $('title').text() || 'No title found'\n  }\n}];"
+      },
+      "id": "code-parse-html-001",
+      "name": "Parse HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "path": "webhook-automation",
+        "options": {}
+      },
+      "id": "webhook-trigger-001",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 500]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.targetUrl }}",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "={{ $json.fieldName }}",
+              "value": "={{ $json.fieldValue }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-post-form-001",
+      "name": "Submit Form",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 500]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "urlsToMonitor",
+              "value": "[\n  \"https://example.com/page1\",\n  \"https://example.com/page2\",\n  \"https://example.com/api/status\"\n]"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-urls-001",
+      "name": "Set URLs to Monitor",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [450, 100]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Split URLs into separate items\nconst urls = JSON.parse($input.first().json.urlsToMonitor);\nreturn urls.map(url => ({ json: { url } }));"
+      },
+      "id": "code-split-urls-001",
+      "name": "Split URLs",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 100]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileContent": "={{ JSON.stringify($json, null, 2) }}",
+        "fileName": "=web-scrape-{{ $now.toFormat('yyyy-MM-dd-HHmmss') }}.json",
+        "options": {
+          "folderPath": "/home/node/data/web-scraping"
+        }
+      },
+      "id": "save-results-001",
+      "name": "Save Results",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [850, 300]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Set URLs to Monitor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Web Page": {
+      "main": [
+        [
+          {
+            "node": "Parse HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse HTML": {
+      "main": [
+        [
+          {
+            "node": "Save Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Submit Form",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set URLs to Monitor": {
+      "main": [
+        [
+          {
+            "node": "Split URLs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Web Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "5",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": ["web-automation", "scraping", "monitoring"]
+}

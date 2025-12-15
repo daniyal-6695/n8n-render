@@ -1,0 +1,332 @@
+{
+  "name": "API Integration Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "api-webhook",
+        "options": {}
+      },
+      "id": "webhook-api-001",
+      "name": "API Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse and validate incoming API request\nconst input = $input.first();\nconst body = input.json.body || {};\nconst headers = input.json.headers || {};\n\n// Validate required fields\nconst requiredFields = ['action', 'data'];\nconst missing = requiredFields.filter(field => !body[field]);\n\nif (missing.length > 0) {\n  return [{\n    json: {\n      success: false,\n      error: `Missing required fields: ${missing.join(', ')}`,\n      statusCode: 400\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    success: true,\n    action: body.action,\n    data: body.data,\n    timestamp: new Date().toISOString(),\n    requestId: headers['x-request-id'] || `req-${Date.now()}`\n  }\n}];"
+      },
+      "id": "code-validate-001",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.action }}",
+                    "value2": "process_data"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "process_data"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.action }}",
+                    "value2": "send_notification"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "send_notification"
+            },
+            {
+              "conditions": {
+                "string": [
+                  {
+                    "value1": "={{ $json.action }}",
+                    "value2": "fetch_data"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "fetch_data"
+            }
+          ]
+        }
+      },
+      "id": "switch-action-001",
+      "name": "Route by Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 2,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process data action\nconst input = $input.first();\nconst data = input.json.data || {};\n\n// Example: Transform and process data\nconst processed = {\n  original: data,\n  processed: {\n    ...data,\n    processedAt: new Date().toISOString(),\n    processedBy: 'automation-agent',\n    checksum: generateChecksum(data)\n  },\n  metadata: {\n    action: 'process_data',\n    requestId: input.json.requestId,\n    status: 'completed'\n  }\n};\n\nfunction generateChecksum(obj) {\n  const str = JSON.stringify(obj);\n  let hash = 0;\n  for (let i = 0; i < str.length; i++) {\n    const char = str.charCodeAt(i);\n    hash = ((hash << 5) - hash) + char;\n    hash = hash & hash;\n  }\n  return Math.abs(hash).toString(16);\n}\n\nreturn [{ json: processed }];"
+      },
+      "id": "code-process-data-001",
+      "name": "Process Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Send notification action\nconst input = $input.first();\nconst data = input.json.data || {};\n\nconst notification = {\n  title: data.title || 'Automation Agent Notification',\n  message: data.message || 'No message provided',\n  level: data.level || 'info',\n  timestamp: new Date().toISOString(),\n  requestId: input.json.requestId,\n  // Format for different platforms\n  platforms: {\n    slack: formatForSlack(data),\n    email: formatForEmail(data),\n    webhook: formatForWebhook(data)\n  }\n};\n\nfunction formatForSlack(data) {\n  return {\n    text: `*${data.title || 'Notification'}*\\n${data.message}`,\n    attachments: data.attachments || []\n  };\n}\n\nfunction formatForEmail(data) {\n  return {\n    subject: data.title || 'Notification',\n    body: data.message,\n    html: `<h2>${data.title}</h2><p>${data.message}</p>`\n  };\n}\n\nfunction formatForWebhook(data) {\n  return {\n    event: 'notification',\n    payload: data\n  };\n}\n\nreturn [{ json: notification }];"
+      },
+      "id": "code-send-notification-001",
+      "name": "Send Notification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data.url }}",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "id": "http-fetch-data-001",
+      "name": "Fetch External Data",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json) }}"
+      },
+      "id": "webhook-response-001",
+      "name": "Return Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "schedule-sync-001",
+      "name": "Periodic Sync (15 min)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [250, 600]
+    },
+    {
+      "parameters": {
+        "url": "https://api.example.com/data",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "id": "http-sync-source-001",
+      "name": "Fetch from Source API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 600]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform data for destination API\nconst items = $input.all();\nconst transformed = [];\n\nfor (const item of items) {\n  const data = item.json.data || item.json;\n  \n  // Map source fields to destination fields\n  transformed.push({\n    json: {\n      id: data.id,\n      name: data.name,\n      value: data.value,\n      lastSync: new Date().toISOString(),\n      source: 'api-sync'\n    }\n  });\n}\n\nreturn transformed;"
+      },
+      "id": "code-transform-sync-001",
+      "name": "Transform for Destination",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 600]
+    },
+    {
+      "parameters": {
+        "url": "https://api.destination.com/update",
+        "method": "POST",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "data",
+              "value": "={{ JSON.stringify($json) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-sync-dest-001",
+      "name": "Send to Destination API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 600]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "fileContent": "={{ JSON.stringify({ syncedAt: new Date().toISOString(), count: $json.length }) }}",
+        "fileName": "=api-sync-{{ $now.toFormat('yyyy-MM-dd-HHmmss') }}.json",
+        "options": {
+          "folderPath": "/home/node/logs/api-sync"
+        }
+      },
+      "id": "log-sync-001",
+      "name": "Log Sync Activity",
+      "type": "n8n-nodes-base.writeFile",
+      "typeVersion": 1,
+      "position": [1050, 600]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "API Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Route by Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Action": {
+      "main": [
+        [
+          {
+            "node": "Process Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fetch External Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Data": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Notification": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch External Data": {
+      "main": [
+        [
+          {
+            "node": "Return Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Periodic Sync (15 min)": {
+      "main": [
+        [
+          {
+            "node": "Fetch from Source API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch from Source API": {
+      "main": [
+        [
+          {
+            "node": "Transform for Destination",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transform for Destination": {
+      "main": [
+        [
+          {
+            "node": "Send to Destination API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Destination API": {
+      "main": [
+        [
+          {
+            "node": "Log Sync Activity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1",
+  "id": "7",
+  "meta": {
+    "instanceId": "computer-automation-agent"
+  },
+  "tags": ["api", "integration", "sync", "webhook"]
+}
