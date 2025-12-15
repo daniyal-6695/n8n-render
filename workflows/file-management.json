@@ -41,9 +41,7 @@
     },
     {
       "parameters": {
-        "operation": "move",
-        "sourcePath": "={{ $json.originalPath }}",
-        "destinationPath": "=/home/node/files/organized/{{ $json.category }}/{{ $json.fileName }}"
+        "command": "=mkdir -p /home/node/files/organized/{{ $json.category }} && mv \"{{ $json.originalPath }}\" \"/home/node/files/organized/{{ $json.category }}/{{ $json.fileName }}\""
       },
       "id": "move-file-001",
       "name": "Move to Category Folder",
@@ -53,18 +51,17 @@
     },
     {
       "parameters": {
-        "operation": "listFiles",
-        "path": "/home/node/files/temp"
+        "command": "find /home/node/files/temp -type f -printf '%p|%T@\\n'"
       },
       "id": "list-files-001",
       "name": "List Temp Files",
-      "type": "n8n-nodes-base.filesFolder",
+      "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
       "position": [450, 300]
     },
     {
       "parameters": {
-        "jsCode": "// Delete files older than 7 days\nconst items = $input.all();\nconst now = new Date();\nconst sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\nconst filesToDelete = [];\n\nfor (const item of items) {\n  const modifiedTime = new Date(item.json.modifiedTime || item.json.mtime);\n  \n  if (modifiedTime < sevenDaysAgo) {\n    filesToDelete.push({\n      json: {\n        path: item.json.path,\n        fileName: item.json.name,\n        age: Math.floor((now - modifiedTime) / (1000 * 60 * 60 * 24)) + ' days'\n      }\n    });\n  }\n}\n\nreturn filesToDelete;"
+        "jsCode": "// Parse file list and filter old files\nconst input = $input.first();\nconst output = input.json.stdout || '';\nconst lines = output.trim().split('\\n').filter(line => line);\nconst now = new Date();\nconst sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);\nconst filesToDelete = [];\n\nfor (const line of lines) {\n  const [path, timestampStr] = line.split('|');\n  const modifiedTime = new Date(parseFloat(timestampStr) * 1000);\n  \n  if (modifiedTime < sevenDaysAgo) {\n    const fileName = path.split('/').pop();\n    filesToDelete.push({\n      json: {\n        path: path,\n        fileName: fileName,\n        age: Math.floor((now - modifiedTime) / (1000 * 60 * 60 * 24)) + ' days'\n      }\n    });\n  }\n}\n\nreturn filesToDelete;"
       },
       "id": "code-filter-old-001",
       "name": "Filter Old Files",

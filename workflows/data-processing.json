@@ -11,11 +11,7 @@
     },
     {
       "parameters": {
-        "filePath": "/home/node/data/input/data.csv",
-        "options": {
-          "delimiter": ",",
-          "encoding": "utf8"
-        }
+        "filePath": "/home/node/data/input/data.csv"
       },
       "id": "read-csv-001",
       "name": "Read CSV File",
@@ -25,15 +21,15 @@
     },
     {
       "parameters": {
-        "operation": "parse",
+        "mode": "csvToJson",
         "options": {
-          "columns": true,
-          "skip_empty_lines": true
+          "delimiter": ",",
+          "headerRow": true
         }
       },
       "id": "csv-parse-001",
       "name": "Parse CSV",
-      "type": "n8n-nodes-base.csvParser",
+      "type": "n8n-nodes-base.convertToFile",
       "typeVersion": 1,
       "position": [650, 300]
     },
