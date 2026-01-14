@@ -1,0 +1,170 @@
+{
+  "name": "Lead Capture API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead-capture",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Sanitize and validate incoming lead data\nconst body = $input.item.json.body;\n\n// Helper function to sanitize string inputs (prevent XSS)\nfunction sanitize(str) {\n  if (typeof str !== 'string') return str;\n  return str\n    .replace(/[<>\"']/g, '') // Remove potentially dangerous characters\n    .trim()\n    .slice(0, 500); // Limit length\n}\n\n// Required fields\nconst required = ['email', 'name', 'company'];\nconst missing = required.filter(field => !body[field]);\n\nif (missing.length > 0) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n\n// Email validation\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(body.email)) {\n  throw new Error('Invalid email format');\n}\n\n// Return validated and sanitized data\nreturn {\n  json: {\n    email: body.email.toLowerCase().trim().slice(0, 255),\n    name: sanitize(body.name),\n    company: sanitize(body.company),\n    phone: body.phone ? sanitize(body.phone) : null,\n    notes: body.notes ? sanitize(body.notes) : '',\n    source: body.source ? sanitize(body.source) : 'api',\n    created_at: new Date().toISOString(),\n    status: 'new'\n  }\n};"
+      },
+      "id": "validate-node",
+      "name": "Validate and Sanitize",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "leads",
+        "columns": "email, name, company, phone, notes, source, created_at, status",
+        "options": {}
+      },
+      "id": "database-node",
+      "name": "Store in Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [650, 250],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "PostgreSQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#leads",
+        "text": "=New Lead Captured!\n\n📧 Email: {{$json[\"email\"]}}\n👤 Name: {{$json[\"name\"]}}\n🏢 Company: {{$json[\"company\"]}}\n📱 Phone: {{$json[\"phone\"] || 'N/A'}}\n📝 Notes: {{$json[\"notes\"] || 'None'}}\n🔗 Source: {{$json[\"source\"]}}\n⏰ Time: {{$json[\"created_at\"]}}"
+      },
+      "id": "slack-node",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [850, 250],
+      "credentials": {
+        "slackApi": {
+          "id": "2",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"success\": true, \"message\": \"Lead captured successfully\", \"lead_id\": {{$json[\"id\"]}}}",
+        "options": {}
+      },
+      "id": "response-success",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format error response\nconst error = $input.item.json.error || 'Validation failed';\nconst message = error.message || error;\n\nreturn {\n  json: {\n    success: false,\n    error: message,\n    status: 400\n  }\n};"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 450]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{$json}}",
+        "options": {
+          "responseCode": "={{$json[\"status\"] || 400}}"
+        }
+      },
+      "id": "response-error",
+      "name": "Error Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [850, 450]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate and Sanitize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate and Sanitize": {
+      "main": [
+        [
+          {
+            "node": "Store in Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "error": [
+        [
+          {
+            "node": "Format Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store in Database": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Slack": {
+      "main": [
+        [
+          {
+            "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "lead-capture-api"
+}
