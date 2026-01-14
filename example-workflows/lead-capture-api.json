@@ -16,13 +16,14 @@
     },
     {
       "parameters": {
-        "functionCode": "// Validate incoming lead data\nconst body = $input.item.json.body;\n\n// Required fields\nconst required = ['email', 'name', 'company'];\nconst missing = required.filter(field => !body[field]);\n\nif (missing.length > 0) {\n  return {\n    json: {\n      success: false,\n      error: `Missing required fields: ${missing.join(', ')}`,\n      status: 400\n    }\n  };\n}\n\n// Email validation\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(body.email)) {\n  return {\n    json: {\n      success: false,\n      error: 'Invalid email format',\n      status: 400\n    }\n  };\n}\n\n// Return validated data\nreturn {\n  json: {\n    email: body.email.toLowerCase(),\n    name: body.name,\n    company: body.company,\n    phone: body.phone || null,\n    notes: body.notes || '',\n    source: body.source || 'api',\n    created_at: new Date().toISOString(),\n    status: 'new'\n  }\n};"
+        "functionCode": "// Sanitize and validate incoming lead data\nconst body = $input.item.json.body;\n\n// Helper function to sanitize string inputs (prevent XSS)\nfunction sanitize(str) {\n  if (typeof str !== 'string') return str;\n  return str\n    .replace(/[<>\"']/g, '') // Remove potentially dangerous characters\n    .trim()\n    .slice(0, 500); // Limit length\n}\n\n// Required fields\nconst required = ['email', 'name', 'company'];\nconst missing = required.filter(field => !body[field]);\n\nif (missing.length > 0) {\n  throw new Error(`Missing required fields: ${missing.join(', ')}`);\n}\n\n// Email validation\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nif (!emailRegex.test(body.email)) {\n  throw new Error('Invalid email format');\n}\n\n// Return validated and sanitized data\nreturn {\n  json: {\n    email: body.email.toLowerCase().trim().slice(0, 255),\n    name: sanitize(body.name),\n    company: sanitize(body.company),\n    phone: body.phone ? sanitize(body.phone) : null,\n    notes: body.notes ? sanitize(body.notes) : '',\n    source: body.source ? sanitize(body.source) : 'api',\n    created_at: new Date().toISOString(),\n    status: 'new'\n  }\n};"
       },
       "id": "validate-node",
-      "name": "Validate Data",
+      "name": "Validate and Sanitize",
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
-      "position": [450, 300]
+      "position": [450, 300],
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -35,7 +36,7 @@
       "name": "Store in Database",
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 1,
-      "position": [650, 300],
+      "position": [650, 250],
       "credentials": {
         "postgres": {
           "id": "1",
@@ -52,7 +53,7 @@
       "name": "Notify Slack",
       "type": "n8n-nodes-base.slack",
       "typeVersion": 1,
-      "position": [850, 200],
+      "position": [850, 250],
       "credentials": {
         "slackApi": {
           "id": "2",
@@ -70,7 +71,17 @@
       "name": "Success Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [1050, 300]
+      "position": [1050, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Format error response\nconst error = $input.item.json.error || 'Validation failed';\nconst message = error.message || error;\n\nreturn {\n  json: {\n    success: false,\n    error: message,\n    status: 400\n  }\n};"
+      },
+      "id": "format-error",
+      "name": "Format Error",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [650, 450]
     },
     {
       "parameters": {
@@ -84,7 +95,7 @@
       "name": "Error Response",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
-      "position": [650, 450]
+      "position": [850, 450]
     }
   ],
   "connections": {
@@ -92,23 +103,27 @@
       "main": [
         [
           {
-            "node": "Validate Data",
+            "node": "Validate and Sanitize",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Validate Data": {
+    "Validate and Sanitize": {
       "main": [
         [
           {
             "node": "Store in Database",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ],
+      "error": [
+        [
           {
-            "node": "Error Response",
+            "node": "Format Error",
             "type": "main",
             "index": 0
           }
@@ -131,6 +146,17 @@
         [
           {
             "node": "Success Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Error": {
+      "main": [
+        [
+          {
+            "node": "Error Response",
             "type": "main",
             "index": 0
           }
